@@ -41,6 +41,7 @@ from pipecat.turns.user_stop import TurnAnalyzerUserTurnStopStrategy
 from pipecat.turns.user_turn_strategies import UserTurnStrategies
 
 from pipecat_turn_blend import TurnBlendAnalyzer
+from turn_blend import load_settings
 
 load_dotenv(ROOT / ".env")
 
@@ -70,7 +71,7 @@ async def bot(runner_args: RunnerArguments):
                              settings=DeepgramTTSService.Settings(voice="aura-2-thalia-en"))
 
     # ---- turn-blend: ends the user's turn. Pipecat's Silero VAD starts it and handles interruptions.
-    turn_blend = TurnBlendAnalyzer(str(ROOT / "turn-blend.onnx"))
+    turn_blend = TurnBlendAnalyzer(str(ROOT / "turn-blend.onnx"), **load_settings())   # TURN_BLEND_* from .env
     context = LLMContext([{"role": "system", "content": SYSTEM}])
     aggregators = LLMContextAggregatorPair(context, user_params=LLMUserAggregatorParams(
         vad_analyzer=SileroVADAnalyzer(params=VADParams(confidence=0.7, start_secs=0.2, stop_secs=0.2)),

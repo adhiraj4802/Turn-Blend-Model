@@ -24,11 +24,13 @@ from livekit.agents import Agent, AgentServer, AgentSession, JobContext, cli
 from livekit.plugins import deepgram, openai
 
 from livekit_turn_blend import TurnBlendVAD
+from turn_blend import load_settings
 
 load_dotenv(ROOT / ".env")
 
 server = AgentServer()
-turn_blend = TurnBlendVAD(str(ROOT / "turn-blend.onnx"))    # loaded once, shared by every call
+turn_blend = TurnBlendVAD(str(ROOT / "turn-blend.onnx"), **load_settings())    # loaded once, shared by every call;
+                                                                                # settings: TURN_BLEND_* in .env
 
 
 @server.rtc_session()
