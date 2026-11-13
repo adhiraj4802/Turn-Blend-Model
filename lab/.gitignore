@@ -1,0 +1,12 @@
+.venv/
+models/
+__pycache__/
+*.log
+bench/eot-bench/
+bench/.venv/
+bench/cache/
+.env
+bot_turns.jsonl
+bot_settings.json
+release/turn-blend.onnx
+release/__pycache__/

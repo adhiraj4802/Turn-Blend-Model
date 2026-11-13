@@ -1,0 +1,479 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Smart Turn latency lab</title>
+<style>
+  :root {
+    --bg: #0f1216; --panel: #181c22; --line: #2a303a; --text: #e6e9ee; --dim: #8b94a3;
+    --accent: #5aa9ff; --speech: #3ecf8e; --warn: #f5a623; --bad: #ef5f5f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  header { display: flex; align-items: center; gap: 14px; padding: 12px 20px;
+    border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  h1 { font-size: 16px; margin: 0; font-weight: 600; }
+  h2 { font-size: 12px; margin: 0 0 10px; color: var(--dim); text-transform: uppercase; letter-spacing: .06em; }
+  main { display: grid; grid-template-columns: 330px 1fr; gap: 16px; padding: 16px 20px; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 14px; }
+  .col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  button { background: var(--accent); color: #06121f; border: 0; border-radius: 6px;
+    padding: 8px 16px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); font-weight: 400; }
+  button.stop { background: var(--bad); color: #fff; }
+  button:disabled { opacity: .5; cursor: default; }
+  .badge { padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    background: #262c36; color: var(--dim); }
+  .badge.speech { background: rgba(62,207,142,.18); color: var(--speech); }
+  .badge.wait { background: rgba(245,166,35,.18); color: var(--warn); }
+  .badge.done { background: rgba(90,169,255,.18); color: var(--accent); }
+  .row { margin-bottom: 12px; }
+  .row label { display: flex; justify-content: space-between; gap: 8px; }
+  .row label b { font-weight: 500; }
+  .row output { color: var(--accent); font-variant-numeric: tabular-nums; }
+  .row small { color: var(--dim); display: block; font-size: 12px; }
+  input[type=range] { width: 100%; accent-color: var(--accent); margin: 4px 0 0; }
+  select { width: 100%; background: var(--bg); color: var(--text); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px; font: inherit; margin-top: 4px; }
+  .checks label { display: block; margin-bottom: 4px; }
+  canvas { width: 100%; height: 190px; display: block; background: var(--bg); border-radius: 6px; }
+  .legend { display: flex; gap: 14px; flex-wrap: wrap; color: var(--dim); font-size: 12px; margin-top: 8px; }
+  .legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .stat { background: var(--bg); border-radius: 6px; padding: 10px; }
+  .stat .k { color: var(--dim); font-size: 12px; }
+  .stat .v { font-size: 20px; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .stat .s { color: var(--dim); font-size: 12px; font-variant-numeric: tabular-nums; }
+  .tablewrap { overflow-x: auto; max-height: 380px; overflow-y: auto; }
+  table { border-collapse: collapse; width: 100%; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  th, td { text-align: right; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  th { color: var(--dim); font-weight: 500; font-size: 12px; position: sticky; top: 0; background: var(--panel); }
+  th:nth-child(-n+3), td:nth-child(-n+3) { text-align: left; }
+  .ok { color: var(--speech); } .inc { color: var(--warn); } .to { color: var(--bad); }
+  #err { color: var(--bad); }
+  .muted { color: var(--dim); }
+</style>
+</head>
+<body>
+<header>
+  <h1>Turn detection lab · Smart Turn v3.2 + turn-1-mini</h1>
+  <button id="toggle">Start mic</button>
+  <span id="state" class="badge">idle</span>
+  <span class="muted" id="live"></span>
+  <span id="err"></span>
+</header>
+
+<main>
+  <div class="col">
+    <div class="panel">
+      <h2>VAD (Silero v6.2)</h2>
+      <div id="vadRows"></div>
+      <div class="row"><label><b>Run VAD on</b></label><select id="vad_backend"></select>
+        <small>trt = TensorRT engine, gpu = CUDA, cpu = CPU.</small></div>
+    </div>
+    <div class="panel">
+      <h2>End-of-turn decision</h2>
+      <div class="row"><label><b>Mode</b></label><select id="st_mode">
+          <option value="blend">blend: Smart Turn + turn-1-mini + silence</option>
+          <option value="streaming">Smart Turn streaming, every chunk</option>
+          <option value="vad_stop">Smart Turn once, at VAD stop</option></select>
+        <small id="modeHelp"></small></div>
+      <div id="blendRows"></div>
+      <div id="streamRows"></div>
+      <h2 style="margin-top:16px">Smart Turn v3.2</h2>
+      <div id="stRows"></div>
+      <div class="row"><label><b>Run Smart Turn on</b></label><select id="st_backend"></select>
+        <small>trt = TensorRT engine (fp32), trt-fp16 = half-precision engine, gpu = CUDA, cpu = CPU.
+          Switching to a backend for the first time can pause up to a minute while its engine builds.</small></div>
+      <div class="row"><label><b>Feature extraction (log-mel)</b></label><select id="fe_backend"></select>
+        <small>The Whisper log-mel step that feeds Smart Turn, as its own ONNX graph.</small></div>
+      <button class="secondary" id="bench">Benchmark current backends</button>
+      <div id="benchOut" class="muted" style="margin-top:8px;font-size:12px"></div>
+    </div>
+    <div class="panel checks">
+      <h2>Microphone <span class="muted" style="text-transform:none;letter-spacing:0">(applies on next Start)</span></h2>
+      <label><input type="checkbox" id="echoCancellation" checked> Echo cancellation</label>
+      <label><input type="checkbox" id="noiseSuppression" checked> Noise suppression</label>
+      <label><input type="checkbox" id="autoGainControl" checked> Auto gain control</label>
+      <button class="secondary" id="reset" style="margin-top:8px">Reset all settings</button>
+    </div>
+  </div>
+
+  <div class="col">
+    <div class="panel">
+      <h2>Live timeline (last 12 s)</h2>
+      <canvas id="cv"></canvas>
+      <div class="legend">
+        <span><i style="background:#5aa9ff"></i>VAD speech probability</span>
+        <span><i style="background:rgba(62,207,142,.35)"></i>VAD "speaking"</span>
+        <span class="stream-only"><i style="background:#facc15"></i>Smart Turn probability, every chunk</span>
+        <span class="blend-only"><i style="background:#c084fc"></i>turn-1-mini probability (in pauses)</span>
+        <span class="blend-only"><i style="background:#ffffff"></i>Blended probability (in pauses)</span>
+        <span class="blend-only"><i style="background:#5aa9ff"></i>Tentative end of turn (dashed; grey = cancelled)</span>
+        <span class="classic-only"><i style="background:#f5a623"></i>Smart Turn: incomplete</span>
+        <span><i style="background:#3ecf8e"></i>Turn ended (committed)</span>
+        <span><i style="background:#ef5f5f"></i>Turn ended by incomplete timeout</span>
+        <span>-- thresholds</span>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>Latency summary</h2>
+      <div class="stats" id="stats"></div>
+      <div class="muted" style="font-size:12px;margin-top:10px">
+        <b>End-of-speech → decision</b> is measured in the browser: from the moment the last speech chunk left the mic
+        to the moment the turn-ending Smart Turn verdict arrived back. It includes the silence waited + network + feature extraction + inference.
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>End-of-turn decisions <button class="secondary" id="clear" style="float:right;padding:2px 10px;margin-top:-4px">Clear</button></h2>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>Turn</th><th>Verdict</th><th>Backends (model / features / VAD)</th><th>Prob</th><th>Audio</th>
+            <th>Silence at decision</th><th>Features</th><th>Inference</th><th>Server total</th><th>Mid-speech positives (ignored)</th><th>Tentative head start</th><th>End-of-speech → decision</th>
+          </tr></thead>
+          <tbody id="log"></tbody>
+        </table>
+      </div>
+      <div class="muted" style="font-size:12px;margin-top:8px">
+        Try: "I can't seem to, um…" (should be incomplete) vs "I can't seem to find the return label." (complete).
+      </div>
+    </div>
+  </div>
+</main>
+
+<script>
+const CHUNK = 512, RATE = 16000, CHUNK_MS = 32, WINDOW_S = 12, STORE = "stlab_cfg_v12";
+const $ = id => document.getElementById(id);
+
+const SLIDERS = {
+  vadRows: [
+    ["vad_confidence", "Confidence", 0.05, 0.95, 0.05, "", "Silero probability needed to count a chunk as speech"],
+    ["vad_start_secs", "Start secs", 0.03, 1.0, 0.01, "s", "Speech must last this long before \"speech started\""],
+    ["vad_stop_secs", "Stop secs", 0.03, 2.0, 0.01, "s", "Silence must last this long before \"speech stopped\" → Smart Turn runs"],
+    ["vad_min_db", "Min volume", -90, -10, 1, " dBFS", "Chunks quieter than this are never speech"],
+  ],
+  blendRows: [
+    ["blend_threshold", "Commit threshold", 0.3, 0.97, 0.01, "", "Blended probability needed to end the turn. Higher = fewer cut-offs, slower"],
+    ["blend_min_silence_ms", "Commit: min silence", 64, 800, 32, " ms", "Silence needed before the turn can end"],
+    ["blend_confirm_chunks", "Commit: chunks in a row", 1, 6, 1, "", "Consecutive chunks above the threshold"],
+    ["tent_threshold", "Tentative threshold", 0.1, 0.95, 0.05, "", "Where an agent could start its LLM early, holding the output"],
+    ["tent_min_silence_ms", "Tentative: min silence", 32, 480, 32, " ms", "Cancelled if you start speaking again"],
+  ],
+  streamRows: [
+    ["stream_min_silence_ms", "Min silence before a positive counts", 0, 320, 32, " ms", "Positives while you are still speaking are ignored; 0 lets them count"],
+    ["stream_confirm_chunks", "Consecutive positives to end turn", 1, 6, 1, "", "How many counted positive verdicts in a row end the turn"],
+    ["stream_every_chunks", "Run every N chunks", 1, 6, 1, "", "1 = every 32 ms. Raise this on the cpu backend"],
+  ],
+  stRows: [
+    ["st_threshold", "Completion threshold", 0.05, 0.95, 0.05, "", "Probability above this = turn complete"],
+    ["st_stop_secs", "Incomplete timeout", 0.5, 8, 0.1, "s", "No positive verdict: end the turn anyway after this much silence"],
+    ["st_pre_speech_ms", "Pre-speech audio", 0, 1000, 50, " ms", "Audio kept from before speech start"],
+    ["st_max_duration_secs", "Max audio window", 1, 8, 0.5, "s", "How much of the turn (from the end) the model sees"],
+    ["st_threads", "CPU threads", 1, 8, 1, "", "Only used when Smart Turn runs on cpu"],
+  ],
+};
+const SELECTS = ["vad_backend", "st_backend", "fe_backend", "st_mode"];
+
+let defaults = {}, cfg = {}, ws = null, audioCtx = null, stream = null, node = null;
+let seq = 0, running = false;
+const sendTimes = new Float64Array(8192);
+const samples = [];   // {t, p, speaking}
+const markers = [];   // {t, color}
+const runs = [];      // smart_turn results
+let vadMs = [], tentative = false;
+
+// ---------------------------------------------------------------- settings
+function buildRows() {
+  for (const [box, rows] of Object.entries(SLIDERS)) {
+    $(box).innerHTML = rows.map(([k, label, min, max, step, unit, help]) => `
+      <div class="row">
+        <label for="${k}"><b>${label}</b><output id="${k}_o"></output></label>
+        <input type="range" id="${k}" min="${min}" max="${max}" step="${step}" data-unit="${unit}">
+        <small>${help}</small>
+      </div>`).join("");
+  }
+  for (const rows of Object.values(SLIDERS)) for (const [k] of rows) {
+    $(k).addEventListener("input", () => { cfg[k] = Number($(k).value); syncUI(); pushConfig(); });
+  }
+  for (const k of SELECTS)
+    $(k).addEventListener("change", () => { cfg[k] = $(k).value; syncUI(); pushConfig(); });
+}
+function syncUI() {
+  for (const rows of Object.values(SLIDERS)) for (const [k] of rows) {
+    $(k).value = cfg[k];
+    $(k + "_o").textContent = cfg[k] + $(k).dataset.unit;
+  }
+  for (const k of SELECTS) $(k).value = cfg[k];
+  const bl = cfg.st_mode === "blend", st = bl || cfg.st_mode === "streaming";
+  $("blendRows").style.display = bl ? "" : "none";
+  $("streamRows").style.display = cfg.st_mode === "streaming" ? "" : "none";
+  for (const el of document.querySelectorAll(".blend-only")) el.style.display = bl ? "" : "none";
+  $("modeHelp").textContent = bl
+    ? "Both models score every pause; a fitted blend of their scores and the elapsed silence decides. English only. On 400 benchmark turns the defaults cut off 15% of turns at about 600 ms mean delay, against 30% and about 1100 ms for Smart Turn once at VAD stop."
+    : cfg.st_mode === "streaming"
+      ? "Smart Turn scores the turn so far on every chunk. The turn ends on a confirmed positive during silence, or at the incomplete timeout."
+      : "Pipecat's way: Smart Turn runs once each time the VAD reports speech stopped.";
+  for (const el of document.querySelectorAll(".stream-only")) el.style.display = st ? "" : "none";
+  for (const el of document.querySelectorAll(".classic-only")) el.style.display = st ? "none" : "";
+}
+function pushConfig() {
+  try { localStorage.setItem(STORE, JSON.stringify(cfg)); } catch {}
+  if (ws && ws.readyState === 1) ws.send(JSON.stringify({ type: "config", config: cfg }));
+}
+
+// ------------------------------------------------------------------- audio
+const WORKLET = `
+class Chunker extends AudioWorkletProcessor {
+  constructor() { super(); this.buf = new Float32Array(${CHUNK}); this.n = 0; }
+  process(inputs) {
+    const ch = inputs[0][0];
+    if (ch) for (let i = 0; i < ch.length; i++) {
+      this.buf[this.n++] = ch[i];
+      if (this.n === ${CHUNK}) { this.port.postMessage(this.buf.slice(0)); this.n = 0; }
+    }
+    return true;
+  }
+}
+registerProcessor("chunker", Chunker);`;
+
+async function start() {
+  $("err").textContent = "";
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: {
+      channelCount: 1,
+      echoCancellation: $("echoCancellation").checked,
+      noiseSuppression: $("noiseSuppression").checked,
+      autoGainControl: $("autoGainControl").checked,
+    }});
+    audioCtx = new AudioContext({ sampleRate: RATE });   // browser resamples the mic to 16 kHz
+    await audioCtx.audioWorklet.addModule(URL.createObjectURL(new Blob([WORKLET], { type: "text/javascript" })));
+    ws = new WebSocket(`ws://${location.host}/ws`);
+    ws.binaryType = "arraybuffer";
+    ws.onmessage = onMessage;
+    ws.onclose = () => { if (running) stop("server connection closed"); };
+    await new Promise((res, rej) => { ws.onopen = res; ws.onerror = () => rej(new Error("cannot reach server")); });
+    pushConfig();
+
+    node = new AudioWorkletNode(audioCtx, "chunker");
+    node.port.onmessage = e => {
+      if (!ws || ws.readyState !== 1) return;
+      const out = new ArrayBuffer(4 + CHUNK * 4);
+      new DataView(out).setUint32(0, seq, true);
+      new Float32Array(out, 4).set(e.data);
+      sendTimes[seq % sendTimes.length] = performance.now();
+      ws.send(out);
+      seq++;
+    };
+    audioCtx.createMediaStreamSource(stream).connect(node);
+    running = true;
+    $("toggle").textContent = "Stop mic"; $("toggle").className = "stop";
+    setState("listening", "");
+  } catch (e) {
+    stop(e.message || String(e));
+  }
+}
+function stop(err) {
+  running = false;
+  if (node) node.disconnect();
+  if (stream) stream.getTracks().forEach(t => t.stop());
+  if (audioCtx) audioCtx.close();
+  if (ws) ws.close();
+  node = stream = audioCtx = ws = null;
+  $("toggle").textContent = "Start mic"; $("toggle").className = "";
+  setState("idle", "");
+  if (err) $("err").textContent = err;
+}
+function setState(text, cls) { $("state").textContent = text; $("state").className = "badge " + cls; }
+
+// ---------------------------------------------------------------- messages
+function onMessage(ev) {
+  const m = JSON.parse(ev.data), now = performance.now();
+  if (m.type === "vad") {
+    samples.push({ t: now, p: m.p, speaking: m.speaking, sp: m.sp, mp: m.mp, bp: m.bp });
+    if (cfg.st_mode === "blend" && m.sp != null) {
+      if (m.bp == null) setState("speaking", "speech");
+      else {
+        const pos = m.bp > cfg.blend_threshold;
+        setState(`silence · blend ${m.bp.toFixed(2)} ${pos ? "POSITIVE" : tentative ? "tentative" : "negative"}`, pos ? "speech" : "wait");
+      }
+    } else if (m.sp != null) {
+      const pos = m.sp > cfg.st_threshold;
+      setState(`${m.speaking ? "speaking" : "silence"} · Smart Turn ${pos ? "POSITIVE" : "negative"} ${m.sp.toFixed(2)}`, pos ? "speech" : "wait");
+    }
+    vadMs.push(m.vad_ms); if (vadMs.length > 300) vadMs.shift();
+    const rt = now - sendTimes[m.seq % sendTimes.length];
+    $("live").textContent = `VAD ${m.p.toFixed(2)} · ${m.db.toFixed(0)} dBFS · VAD infer ${avg(vadMs).toFixed(2)} ms/chunk · round-trip ${rt.toFixed(0)} ms`;
+    renderVadStat();
+  } else if (m.type === "tentative") {
+    tentative = true;
+    markers.push({ t: now, color: "#5aa9ff", dash: true });
+  } else if (m.type === "tentative_cancelled") {
+    tentative = false;
+    markers.push({ t: now, color: "#8b94a3", dash: true });
+  } else if (m.type === "speech_start") {
+    if (cfg.st_mode !== "streaming") setState("speaking", "speech");
+  } else if (m.type === "smart_turn") {
+    m.e2e = now - sendTimes[m.last_speech_seq % sendTimes.length];
+    tentative = false;
+    runs.push(m);
+    markers.push({ t: now, color: m.complete ? "#3ecf8e" : "#f5a623" });
+    addRow(m);
+    renderStats();
+    if (!m.complete) setState("incomplete - waiting", "wait");
+  } else if (m.type === "turn_end") {
+    if (m.reason === "timeout") {
+      markers.push({ t: now, color: "#ef5f5f" });
+      const e2e = now - sendTimes[m.last_speech_seq % sendTimes.length];
+      const tr = document.createElement("tr");
+      const extra = m.runs ? ` · ${m.runs} runs` : "";
+      const mid = m.runs ? m.mid_speech_positives : "";
+      const pr = m.probability != null ? m.probability.toFixed(3) : "";
+      tr.innerHTML = `<td>#${m.turn}${extra}</td><td class="to">negative → incomplete timeout</td><td></td><td>${pr}</td><td colspan="5"></td><td>${mid}</td><td>${m.tentatives_cancelled != null && cfg.st_mode === "blend" ? m.tentatives_cancelled + " cancelled" : ""}</td><td>${e2e.toFixed(0)} ms</td>`;
+      $("log").prepend(tr);
+    }
+    setState(`turn #${m.turn} ended (${m.reason === "timeout" ? "timeout" : "smart turn"})`, "done");
+  }
+}
+function addRow(m) {
+  const tr = document.createElement("tr");
+  tr.innerHTML = `<td>#${m.turn}${m.streaming ? ` · ${m.run} runs` : "." + m.run}</td>
+    <td class="${m.complete ? "ok" : "inc"}">${m.blend ? "blend positive → turn ended" : m.streaming ? "positive → turn ended" : m.complete ? "complete" : "incomplete"}</td>
+    <td>${m.st_backend} / ${m.fe_backend} / ${m.vad_backend}</td>
+    <td>${m.probability.toFixed(3)}${m.blend ? ` <span class="muted">(ST ${m.smart_turn_prob.toFixed(2)} · mini ${m.mini_prob.toFixed(2)})</span>` : ""}</td><td>${m.audio_secs.toFixed(2)} s</td>
+    <td>${m.vad_wait_ms.toFixed(0)} ms</td><td>${m.feature_ms.toFixed(1)} ms</td>
+    <td>${m.inference_ms.toFixed(1)} ms</td><td>${m.server_ms.toFixed(1)} ms</td><td>${m.streaming ? m.mid_speech_positives : ""}</td>
+    <td>${m.blend ? (m.tentative_lead_ms != null ? m.tentative_lead_ms.toFixed(0) + " ms" : "–") + ` · ${m.tentatives_cancelled} cancelled` : ""}</td>
+    <td><b>${m.e2e.toFixed(0)} ms</b></td>`;
+  $("log").prepend(tr);
+}
+
+// ------------------------------------------------------------------- stats
+const avg = a => a.length ? a.reduce((x, y) => x + y, 0) / a.length : 0;
+function pct(a, q) {
+  if (!a.length) return 0;
+  const s = [...a].sort((x, y) => x - y);
+  return s[Math.min(s.length - 1, Math.floor(q / 100 * s.length))];
+}
+function renderStats() {
+  const cards = [
+    ["End-of-speech → decision", runs.map(r => r.e2e), 0],
+    ["Smart Turn inference", runs.map(r => r.inference_ms), 1],
+    ["Feature extraction", runs.map(r => r.feature_ms), 1],
+    ["Silence at decision", runs.map(r => r.vad_wait_ms), 0],
+  ];
+  if (cfg.st_mode === "blend") cards.push(
+    ["Tentative head start", runs.filter(r => r.tentative_lead_ms != null).map(r => r.tentative_lead_ms), 0]);
+  $("stats").innerHTML = cards.map(([k, v, d]) => `
+    <div class="stat"><div class="k">${k}</div>
+      <div class="v">${v.length ? avg(v).toFixed(d) + " ms" : "–"}</div>
+      <div class="s">${v.length ? `p50 ${pct(v, 50).toFixed(d)} · p95 ${pct(v, 95).toFixed(d)} · n=${v.length}` : "avg · no runs yet"}</div>
+    </div>`).join("") + `<div class="stat"><div class="k">VAD inference per 32 ms chunk</div>
+      <div class="v" id="vadStatV">–</div><div class="s" id="vadStatS">last 300 chunks</div></div>`;
+  renderVadStat();
+}
+function renderVadStat() {
+  if (!vadMs.length || !$("vadStatV")) return;
+  $("vadStatV").textContent = avg(vadMs).toFixed(2) + " ms";
+  $("vadStatS").textContent = `p50 ${pct(vadMs, 50).toFixed(2)} · p95 ${pct(vadMs, 95).toFixed(2)} · last ${vadMs.length} chunks`;
+}
+
+// ---------------------------------------------------------------- timeline
+const cv = $("cv"), g = cv.getContext("2d");
+function draw() {
+  const dpr = window.devicePixelRatio || 1, w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  g.clearRect(0, 0, w, h);
+  const now = performance.now(), t0 = now - WINDOW_S * 1000;
+  while (samples.length && samples[0].t < t0) samples.shift();
+  while (markers.length && markers[0].t < t0) markers.shift();
+  const x = t => (t - t0) / (WINDOW_S * 1000) * w, y = p => h - 6 - p * (h - 12);
+  const cw = CHUNK_MS / (WINDOW_S * 1000) * w + 1;
+
+  g.fillStyle = "rgba(62,207,142,.22)";
+  for (const s of samples) if (s.speaking) g.fillRect(x(s.t) - cw, 0, cw, h);
+
+  g.strokeStyle = "#8b94a3"; g.setLineDash([4, 4]); g.lineWidth = 1;
+  g.beginPath(); g.moveTo(0, y(cfg.vad_confidence)); g.lineTo(w, y(cfg.vad_confidence)); g.stroke();
+  g.setLineDash([]);
+
+  g.strokeStyle = "#5aa9ff"; g.lineWidth = 1.5; g.beginPath();
+  samples.forEach((s, i) => i ? g.lineTo(x(s.t), y(s.p)) : g.moveTo(x(s.t), y(s.p)));
+  g.stroke();
+
+  // streaming Smart Turn probability
+  g.strokeStyle = "rgba(250,204,21,.45)"; g.setLineDash([2, 4]); g.lineWidth = 1;
+  if (cfg.st_mode !== "vad_stop") { g.beginPath(); g.moveTo(0, y(cfg.st_threshold)); g.lineTo(w, y(cfg.st_threshold)); g.stroke(); }
+  g.setLineDash([]);
+  g.strokeStyle = "#facc15"; g.lineWidth = 1.75; g.beginPath();
+  let on = false;
+  for (const s of samples) {
+    if (s.sp == null) { on = false; continue; }
+    on ? g.lineTo(x(s.t), y(s.sp)) : g.moveTo(x(s.t), y(s.sp));
+    on = true;
+  }
+  g.stroke();
+
+  if (cfg.st_mode === "blend") {
+    for (const [key, color, width] of [["mp", "#c084fc", 1.25], ["bp", "#ffffff", 2]]) {
+      g.strokeStyle = color; g.lineWidth = width; g.beginPath();
+      let on2 = false;
+      for (const s of samples) {
+        if (s[key] == null) { on2 = false; continue; }
+        on2 ? g.lineTo(x(s.t), y(s[key])) : g.moveTo(x(s.t), y(s[key]));
+        on2 = true;
+      }
+      g.stroke();
+    }
+    g.strokeStyle = "rgba(255,255,255,.5)"; g.setLineDash([2, 4]); g.lineWidth = 1;
+    g.beginPath(); g.moveTo(0, y(cfg.blend_threshold)); g.lineTo(w, y(cfg.blend_threshold)); g.stroke();
+    g.setLineDash([]);
+  }
+
+  for (const m of markers) {
+    g.lineWidth = m.dash ? 1.5 : 2; g.setLineDash(m.dash ? [4, 4] : []);
+    g.strokeStyle = m.color; g.beginPath(); g.moveTo(x(m.t), 0); g.lineTo(x(m.t), h); g.stroke();
+  }
+  g.setLineDash([]);
+  requestAnimationFrame(draw);
+}
+
+// -------------------------------------------------------------------- init
+$("toggle").onclick = () => running ? stop() : start();
+$("clear").onclick = () => { runs.length = 0; $("log").innerHTML = ""; renderStats(); };
+$("reset").onclick = () => { cfg = { ...defaults }; syncUI(); pushConfig(); };
+$("bench").onclick = async () => {
+  $("bench").disabled = true; $("benchOut").textContent = "running…";
+  try {
+    const q = `st_backend=${cfg.st_backend}&fe_backend=${cfg.fe_backend}&vad_backend=${cfg.vad_backend}&threads=${cfg.st_threads}`;
+    const r = await (await fetch(`/api/benchmark?${q}`)).json();
+    if (r.error) throw new Error(r.error);
+    const f = s => `p50 ${s.p50.toFixed(2)} / p95 ${s.p95.toFixed(2)} ms`;
+    $("benchOut").innerHTML = `Smart Turn (${r.st_backend}): ${f(r.smart_turn_ms)}<br>Features (${r.fe_backend}): ${f(r.feature_ms)}<br>VAD (${r.vad_backend}): ${f(r.vad_ms)} per chunk`;
+  } catch (e) { $("benchOut").textContent = "benchmark failed: " + e.message; }
+  $("bench").disabled = false;
+};
+
+(async () => {
+  const info = await (await fetch("/api/info")).json();
+  defaults = info.defaults;
+  let saved = {};
+  try { saved = JSON.parse(localStorage.getItem(STORE) || "{}"); } catch {}
+  cfg = { ...defaults, ...saved };
+  const fill = (id, opts) => {
+    $(id).innerHTML = opts.map(v => `<option>${v}</option>`).join("");
+    if (!opts.includes(cfg[id])) cfg[id] = defaults[id];
+  };
+  fill("vad_backend", info.backends); fill("fe_backend", info.backends); fill("st_backend", info.st_backends);
+  if (!info.tensorrt) $("err").textContent = "TensorRT is not available on the server; using " + info.backends[0];
+  buildRows(); syncUI(); renderStats(); draw();
+})();
+</script>
+</body>
+</html>

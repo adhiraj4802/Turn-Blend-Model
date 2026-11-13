@@ -1,0 +1,9 @@
+# NVIDIA GPU setup (./run.sh gpu): adds the CUDA and TensorRT backends. CPU still works.
+numpy
+onnxruntime-gpu[cuda,cudnn]
+tensorrt-cu13<11  # must be TensorRT 10 to match onnxruntime-gpu
+onnx
+huggingface_hub
+fastapi
+uvicorn[standard]
+transformers  # only used once, to build models/whisper_features_8s.onnx

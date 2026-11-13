@@ -1,0 +1,5 @@
+numpy
+onnxruntime
+pipecat-ai[webrtc,runner,daily,deepgram,openai,silero]
+pipecat-ai-small-webrtc-prebuilt
+python-dotenv

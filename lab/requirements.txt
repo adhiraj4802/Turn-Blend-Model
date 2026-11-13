@@ -1,0 +1,8 @@
+# CPU setup (./run.sh). For NVIDIA GPU / TensorRT use requirements-gpu.txt (./run.sh gpu).
+numpy
+onnxruntime
+onnx
+huggingface_hub
+fastapi
+uvicorn[standard]
+transformers  # only used once, to build models/whisper_features_8s.onnx

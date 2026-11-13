@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>turn-blend settings console</title>
+<style>
+  :root { color-scheme:dark; --bg:#0e131b; --panel:#151c27; --sunk:#1c2533; --fg:#e7ecf4; --muted:#95a1b5; --line:#2c3748;
+          --accent:#5ea6ff; --good:#41d09a; --warn:#f0b93a; --bad:#f5766a; --mini:#b792ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, "Segoe UI", sans-serif; }
+  header { display:flex; flex-wrap:wrap; gap:10px 18px; align-items:center; padding:14px 20px; border-bottom:1px solid var(--line); position:sticky; top:0; background:var(--bg); z-index:5; }
+  h1 { font-size:17px; margin:0; }
+  h2 { font-size:13px; margin:0 0 10px; text-transform:uppercase; letter-spacing:.07em; color:var(--muted); font-weight:600; }
+  .pill { font-size:12.5px; padding:4px 10px; border-radius:99px; background:var(--sunk); color:var(--muted); white-space:nowrap; }
+  .pill b { color:var(--fg); font-weight:600; }
+  .pill.flash { background:#14402f; color:var(--good); }
+  .pill.err { background:#4a1f1c; color:var(--bad); }
+  .spacer { flex:1; }
+  a.btn, button { font:inherit; color:var(--fg); background:var(--sunk); border:1px solid var(--line); border-radius:6px; padding:6px 12px; cursor:pointer; text-decoration:none; }
+  a.btn.primary { background:var(--accent); color:#06121f; border-color:var(--accent); font-weight:600; }
+  button:hover, a.btn:hover { filter:brightness(1.15); }
+  button:focus-visible, a:focus-visible, input:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  main { display:grid; grid-template-columns:minmax(330px, 430px) minmax(0, 1fr); gap:18px; padding:18px 20px 40px; align-items:start; }
+  @media (max-width: 980px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:14px 16px; min-width:0; }
+  .group + .group { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); }
+  .row { display:grid; grid-template-columns:1fr 92px; gap:2px 10px; align-items:center; margin-bottom:12px; }
+  .row label { font-weight:600; font-size:13.5px; }
+  .row .dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:var(--warn); margin-left:6px; visibility:hidden; }
+  .row.changed .dot { visibility:visible; }
+  .row input[type=range] { grid-column:1; width:100%; accent-color:var(--accent); }
+  .num { display:flex; align-items:center; gap:4px; grid-row:1 / span 2; grid-column:2; align-self:center; }
+  .num input { width:64px; background:var(--sunk); border:1px solid var(--line); color:var(--fg); border-radius:5px; padding:4px 6px; font:inherit; font-variant-numeric:tabular-nums; text-align:right; }
+  .num span { color:var(--muted); font-size:12px; width:18px; }
+  .row small { grid-column:1 / -1; color:var(--muted); font-size:12px; }
+  .fixed { font-size:12.5px; color:var(--muted); display:grid; grid-template-columns:1fr auto; gap:3px 12px; }
+  .fixed b { color:var(--fg); font-weight:500; }
+  .formula { font:12px/1.5 ui-monospace, Menlo, monospace; background:var(--sunk); border-radius:6px; padding:8px 10px; margin-bottom:12px; overflow-x:auto; white-space:nowrap; color:var(--muted); }
+  .formula b { color:var(--fg); font-weight:600; }
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit, minmax(150px, 1fr)); gap:10px; margin-bottom:14px; }
+  .tile { background:var(--panel); border:1px solid var(--line); border-radius:8px; padding:10px 12px; }
+  .tile .k { font-size:11.5px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); }
+  .tile .v { font-size:24px; font-weight:650; font-variant-numeric:tabular-nums; margin-top:2px; }
+  .tile .v small { font-size:13px; color:var(--muted); font-weight:400; }
+  .tile .s { font-size:12px; color:var(--muted); }
+  .tablewrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13px; }
+  th, td { padding:7px 10px 7px 0; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; white-space:nowrap; }
+  th { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); font-weight:600; position:sticky; top:0; background:var(--panel); }
+  td.n, th.n { text-align:right; font-variant-numeric:tabular-nums; }
+  td.text { white-space:normal; min-width:170px; max-width:300px; color:var(--fg); }
+  td.text div { display:-webkit-box; -webkit-line-clamp:3; -webkit-box-orient:vertical; overflow:hidden; }
+  td .sub { color:var(--muted); font-size:11.5px; }
+  .tag { font-size:11px; padding:1px 7px; border-radius:99px; border:1px solid var(--line); color:var(--muted); }
+  .tag.commit { color:var(--good); border-color:#1f5a45; }
+  .tag.timeout { color:var(--warn); border-color:#6b5320; }
+  .big { font-weight:650; }
+  .empty { color:var(--muted); padding:26px 0; text-align:center; }
+  .head { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+  .head h2 { margin:0; }
+</style>
+</head>
+<body>
+<header>
+  <h1>turn-blend settings console</h1>
+  <span class="pill" id="status">connecting…</span>
+  <span class="pill" id="mode"></span>
+  <span class="spacer"></span>
+  <a class="btn primary" id="call" target="_blank" rel="noopener">Open call page</a>
+</header>
+
+<main>
+  <section class="panel" aria-label="Settings">
+    <div class="head"><h2>Settings</h2><span class="spacer"></span><button id="reset">Reset to defaults</button></div>
+    <div id="groups"></div>
+    <div class="group">
+      <h2>Fixed while running</h2>
+      <div class="fixed" id="fixed"></div>
+    </div>
+  </section>
+
+  <section aria-label="Results">
+    <div class="tiles">
+      <div class="tile"><div class="k">Turns measured</div><div class="v" id="t_n">0</div><div class="s" id="t_n_s">this session</div></div>
+      <div class="tile"><div class="k">Turn detection, median</div><div class="v" id="t_det">–</div><div class="s">last speech → end-of-turn decision</div></div>
+      <div class="tile"><div class="k">Full turn latency, median</div><div class="v" id="t_full">–</div><div class="s">you stop → bot starts speaking</div></div>
+      <div class="tile"><div class="k">Last turn</div><div class="v" id="t_last">–</div><div class="s" id="t_last_s">full turn latency</div></div>
+    </div>
+    <div class="panel">
+      <div class="head"><h2>Turns</h2><span class="pill" id="scope"></span><span class="spacer"></span><button id="clear">Clear</button></div>
+      <div class="tablewrap">
+        <table>
+          <thead><tr>
+            <th>Time</th><th class="n">Rev</th><th>You said</th><th>Ended by</th>
+            <th class="n">Turn detection</th><th class="n">Full turn</th>
+            <th class="n">Silence at decision</th><th class="n">Blend</th><th class="n">Smart Turn</th><th class="n">mini</th>
+            <th class="n">Transcript</th><th class="n">LLM</th><th class="n">Speech</th>
+          </tr></thead>
+          <tbody id="rows"></tbody>
+        </table>
+      </div>
+      <div class="empty" id="empty">No turns yet. Open the call page, press Connect and talk.</div>
+    </div>
+  </section>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+let spec = [], defaults = {}, settings = {}, rev = 0, pending = {}, timer = null, flashTimer = null;
+$("call").href = `http://${location.hostname}:7860`;
+
+const fmt = (key, v) => { const s = spec.find(x => x.key === key); const d = (String(s.step).split(".")[1] || "").length; return Number(v).toFixed(d); };
+const ms = v => v == null ? "–" : `${Math.round(v)}<small> ms</small>`;
+const median = a => { if (!a.length) return null; const s = [...a].sort((x, y) => x - y), m = s.length >> 1; return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2; };
+const esc = s => String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function status(text, cls) {
+  const el = $("status"); el.innerHTML = text; el.className = "pill" + (cls ? " " + cls : "");
+}
+function showState(state, justApplied) {
+  rev = state.rev;
+  const t = new Date(state.applied_at * 1000).toLocaleTimeString();
+  status(`${justApplied ? "Applied · " : ""}settings revision <b>${state.rev}</b> · live since ${t}`, justApplied ? "flash" : "");
+  clearTimeout(flashTimer);
+  if (justApplied) flashTimer = setTimeout(() => showState(state, false), 1500);
+  $("mode").innerHTML = state.mode === "blend" ? `turn detection: <b>our VAD + blend</b>`
+    : `turn detection: <b>Pipecat stock Smart Turn</b> · these settings do not apply`;
+  $("scope").textContent = `${state.calls} call${state.calls === 1 ? "" : "s"} since the bot started`;
+}
+
+function build(data) {
+  spec = data.spec; defaults = data.defaults; settings = data.settings;
+  const groups = {};
+  spec.forEach(s => (groups[s.group] ||= []).push(s));
+  $("groups").innerHTML = Object.entries(groups).map(([name, items]) => `
+    <div class="group"><h2>${esc(name)}</h2>
+      ${name === "Blend weights" ? `<div class="formula">p = sigmoid( <b>bias</b> + <b>w₁</b>·logit(P_smart_turn) + <b>w₂</b>·logit(P_mini) + <b>w₃</b>·ln(silence s) )</div>` : ""}
+      ${items.map(s => `
+      <div class="row" id="row_${s.key}">
+        <label for="r_${s.key}">${esc(s.label)}<i class="dot" title="Changed from the default"></i></label>
+        <input type="range" id="r_${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" data-key="${s.key}">
+        <div class="num"><input type="number" id="n_${s.key}" min="${s.min}" max="${s.max}" step="${s.step}" data-key="${s.key}" aria-label="${esc(s.label)} value"><span>${esc(s.unit)}</span></div>
+        <small>${esc(s.help)} Default ${fmt(s.key, defaults[s.key])}${s.unit ? " " + esc(s.unit) : ""}.</small>
+      </div>`).join("")}
+    </div>`).join("");
+  $("fixed").innerHTML = Object.entries(data.fixed).map(([k, v]) => `<span>${esc(k)}</span><b>${esc(v)}</b>`).join("");
+  document.querySelectorAll("#groups input").forEach(el => {
+    el.addEventListener("input", () => change(el.dataset.key, el.value, el.type === "number"));
+  });
+  paint(); showState(data.state, false);
+}
+function paint(skipKey) {
+  spec.forEach(s => {
+    const v = settings[s.key];
+    $("r_" + s.key).value = v;
+    if (s.key !== skipKey) $("n_" + s.key).value = fmt(s.key, v);
+    $("row_" + s.key).classList.toggle("changed", Math.abs(v - defaults[s.key]) > 1e-9);
+  });
+}
+function change(key, value, typing) {
+  if (value === "" || isNaN(value)) return;
+  settings[key] = Number(value); pending[key] = Number(value);
+  paint(typing ? key : null);
+  clearTimeout(timer); timer = setTimeout(send, typing ? 500 : 120);
+}
+async function send(body) {
+  body = body || { values: pending }; pending = {};
+  try {
+    const r = await fetch("/api/settings", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    const d = await r.json();
+    const focused = document.activeElement && document.activeElement.type === "number" ? document.activeElement.dataset.key : null;
+    settings = d.settings; paint(focused); showState(d.state, true);
+  } catch (e) { status("Could not reach the bot. Is ./run_bot.sh running?", "err"); }
+}
+$("reset").onclick = () => send({ reset: true });
+$("clear").onclick = async () => { await fetch("/api/turns/clear", { method: "POST" }); poll(); };
+
+function parts(lines) {
+  const out = {};
+  (lines || []).forEach(l => { const m = l.match(/([\d.]+)s\s+(.+?)\s{2,}\[/); if (m) out[m[2].trim()] = parseFloat(m[1]) * 1000; });
+  return out;
+}
+function render(turns) {
+  const det = turns.filter(t => t.detect_ms != null).map(t => t.detect_ms);
+  const full = turns.filter(t => t.full_ms != null).map(t => t.full_ms);
+  $("t_n").textContent = turns.length;
+  $("t_n_s").textContent = `${full.length} with a bot reply measured`;
+  $("t_det").innerHTML = ms(median(det));
+  $("t_full").innerHTML = ms(median(full));
+  const last = [...turns].reverse().find(t => t.full_ms != null);
+  $("t_last").innerHTML = ms(last ? last.full_ms : null);
+  $("t_last_s").textContent = last && last.detect_ms != null ? `full turn latency · detection ${Math.round(last.detect_ms)} ms` : "full turn latency";
+  $("empty").hidden = turns.length > 0;
+  const p3 = v => v == null ? "–" : Number(v).toFixed(2);
+  $("rows").innerHTML = [...turns].reverse().map(t => {
+    const b = parts(t.breakdown);
+    const cell = v => v == null ? "–" : Math.round(v) + " ms";
+    return `<tr>
+      <td>${new Date(t.t * 1000).toLocaleTimeString()}</td>
+      <td class="n">${t.rev}${t.rev === rev ? "" : ` <span class="sub">old</span>`}</td>
+      <td class="text"><div title="${esc(t.text || "")}">${t.text == null ? `<span class="sub">waiting for transcript…</span>` : esc(t.text) || `<span class="sub">(no words)</span>`}</div></td>
+      <td>${t.reason ? `<span class="tag ${t.reason}">${t.reason === "commit" ? "blend commit" : "silence timeout"}</span>` : `<span class="tag">Pipecat</span>`}
+          ${t.tentatives_cancelled ? `<div class="sub">${t.tentatives_cancelled} tentative end${t.tentatives_cancelled > 1 ? "s" : ""} cancelled</div>` : ""}</td>
+      <td class="n big">${cell(t.detect_ms)}</td>
+      <td class="n big">${t.full_ms == null ? `<span class="sub">no reply</span>` : cell(t.full_ms)}</td>
+      <td class="n">${cell(t.silence_ms)}</td>
+      <td class="n">${p3(t.blend)}</td><td class="n">${p3(t.smart_turn)}</td><td class="n">${p3(t.mini)}</td>
+      <td class="n">${cell(b["transcription"])}</td><td class="n">${cell(b["LLM inference"])}</td><td class="n">${cell(b["speech synthesis"])}</td>
+    </tr>`;
+  }).join("");
+}
+async function poll() {
+  try {
+    const d = await (await fetch("/api/turns")).json();
+    if (d.state.rev !== rev && !Object.keys(pending).length) { const s = await (await fetch("/api/settings")).json(); settings = s.settings; paint(); showState(s.state, false); }
+    else if ($("status").classList.contains("err")) showState(d.state, false);
+    $("scope").textContent = `${d.state.calls} call${d.state.calls === 1 ? "" : "s"} since the bot started`;
+    render(d.turns);
+  } catch (e) { status("Could not reach the bot. Is ./run_bot.sh running?", "err"); }
+}
+fetch("/api/settings").then(r => r.json()).then(d => { build(d); poll(); setInterval(poll, 1000); })
+  .catch(() => status("Could not reach the bot. Is ./run_bot.sh running?", "err"));
+</script>
+</body>
+</html>

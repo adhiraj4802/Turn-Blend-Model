@@ -1,0 +1,31 @@
+0 8 s
+20 146 s
+40 312 s
+60 478 s
+80 615 s
+100 752 s
+120 881 s
+140 1010 s
+
+baseline: blend3 (Smart Turn + mini + silence), CV | bootstrap 150 resamples of the 400 turns
+  90% interval of the baseline itself: cut@300 (pts) 15.6..23.1; cut@600 (pts) 5.6..10.1; lat@5% (ms) 631.6..938.0; lat@10% (ms) 402.4..613.2
+vs blend3 + ST history, CV (LR)
+    cut@300 (pts)  mean change    +2.0   90% interval    +0.1 ..    +3.9   CLEAR
+    cut@600 (pts)  mean change    -0.2   90% interval    -1.2 ..    +0.8   not distinguishable from noise
+    lat@5% (ms)    mean change   -27.0   90% interval   -92.4 ..   +39.4   not distinguishable from noise
+    lat@10% (ms)   mean change    +0.1   90% interval   -42.3 ..   +49.0   not distinguishable from noise
+vs blend3 + ST and mini history, CV (LR)
+    cut@300 (pts)  mean change    +1.2   90% interval    -0.9 ..    +3.1   not distinguishable from noise
+    cut@600 (pts)  mean change    +0.0   90% interval    -1.2 ..    +1.1   not distinguishable from noise
+    lat@5% (ms)    mean change   -40.1   90% interval  -143.8 ..   +60.6   not distinguishable from noise
+    lat@10% (ms)   mean change    +9.2   90% interval   -46.4 ..   +56.7   not distinguishable from noise
+vs blend3, CV (GBM)
+    cut@300 (pts)  mean change    -0.9   90% interval    -2.3 ..    +0.5   not distinguishable from noise
+    cut@600 (pts)  mean change    -0.1   90% interval    -1.2 ..    +0.8   not distinguishable from noise
+    lat@5% (ms)    mean change   -16.4   90% interval   -97.1 ..   +83.9   not distinguishable from noise
+    lat@10% (ms)   mean change    -2.3   90% interval   -40.1 ..   +43.2   not distinguishable from noise
+vs turn-1-mini streaming, raw score
+    cut@300 (pts)  mean change    +2.9   90% interval    +0.4 ..    +5.6   CLEAR
+    cut@600 (pts)  mean change    +1.4   90% interval    -0.3 ..    +3.1   not distinguishable from noise
+    lat@5% (ms)    mean change   +43.4   90% interval   -60.3 ..  +138.4   not distinguishable from noise
+    lat@10% (ms)   mean change   +76.2   90% interval    +7.7 ..  +145.3   CLEAR

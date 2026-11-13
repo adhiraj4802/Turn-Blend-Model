@@ -1,0 +1,5 @@
+# Voice bot (./run_bot.sh): everything the demo needs, plus Pipecat with Daily, Deepgram and OpenAI.
+-r requirements.txt
+pipecat-ai[webrtc,runner,daily,deepgram,openai,silero]
+pipecat-ai-small-webrtc-prebuilt  # the browser page served at http://localhost:7860
+python-dotenv
