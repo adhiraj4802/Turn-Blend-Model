@@ -1,0 +1,38 @@
+{
+ "turns": 400,
+ "turn_opened": 400,
+ "ended_early_pct": 14.5,
+ "final_end_by_timeout_pct": 0.5,
+ "delay_ms_all": {
+  "mean": 630,
+  "median": 512,
+  "p75": 776,
+  "p90": 1168,
+  "p95": 1408
+ },
+ "delay_ms_turns_not_cut": {
+  "n": 341,
+  "mean": 627,
+  "median": 512,
+  "p90": 1168
+ },
+ "within_ms_pct": {
+  "400": 34.4,
+  "500": 48.9,
+  "600": 61.8,
+  "800": 76.7,
+  "1000": 84.3,
+  "1500": 96.5
+ },
+ "tentative": {
+  "turns_with_tentative_pct": 98.8,
+  "tentative_delay_ms_median": 224,
+  "lead_over_commit_ms_median": 256,
+  "lead_over_commit_ms_mean": 352
+ },
+ "compute_ms_per_chunk": {
+  "plain_median": 5.5,
+  "scored_median": 53.16,
+  "share_of_chunks_scored_pct": 8.5
+ }
+}
